@@ -1,5 +1,7 @@
 package me.ericdavis.lazySelection;
 
+import me.ericdavis.lazySelection.events.LazyAreaCompleteEvent;
+import me.ericdavis.lazySelection.events.LazyPointsCompleteEvent;
 import org.bukkit.*;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -63,6 +65,14 @@ public final class LazySelection implements Listener {
             return;
         }
 
+        LazyAreaCompleteEvent event = new LazyAreaCompleteEvent(player, tempFirstClicks.get(id), loc2);
+        Bukkit.getPluginManager().callEvent(event);
+
+        if (event.isCancelled()) {
+            removeFromArea(id);
+            return;
+        }
+
         if (!setLocationValues(playerLoc1.get(id), tempFirstClicks.get(id))) {
             Bukkit.getLogger().warning("Could not set Area because first location given is null");
             return;
@@ -72,9 +82,8 @@ public final class LazySelection implements Listener {
             return;
         }
 
-        // show particles at both points
-        showSelectionParticles(player, tempFirstClicks.get(id));
-        showSelectionParticles(player, loc2);
+        // show particles
+        createParticleOutline(tempFirstClicks.get(id), loc2);
 
         player.sendMessage(areaCompletedMessage);
 
@@ -89,14 +98,26 @@ public final class LazySelection implements Listener {
             return;
         }
 
-        if (tempPoints.get(id).isEmpty()) {
+        List<Location> selectedPoints = tempPoints.get(id);
+
+        if (selectedPoints.isEmpty()) {
             Bukkit.getLogger().warning("[LazySelection] Attempted to confirm a points selection that is empty for player: " + player.getName());
             removeFromPoints(id);
             player.sendMessage(stopPointsMessage);
             return;
         }
 
-        listToConfirm.get(id).addAll(tempPoints.get(id));
+        LazyPointsCompleteEvent event = new LazyPointsCompleteEvent(player, selectedPoints);
+        Bukkit.getServer().getPluginManager().callEvent(event);
+
+        if (event.isCancelled()) {
+            removeFromPoints(id);
+            return;
+        }
+
+        // Use the potentially modified list from the event
+        listToConfirm.get(id).addAll(event.getPoints());
+
         player.sendMessage(pointsCompletedMessage.replace("%count%", String.valueOf(tempPoints.get(id).size())));
         removeFromPoints(id);
     }
@@ -246,6 +267,50 @@ public final class LazySelection implements Listener {
         for (double y = 1; y >= -1; y -= 0.5) {
             Location particleLoc = loc.clone().add(0.5, y, 0.5); // center on block
             player.spawnParticle(Particle.HAPPY_VILLAGER, particleLoc, 5, 0.1, 1.0, 0.1, 0);
+        }
+    }
+
+    /**
+     *
+     * @param loc1 Corner 1
+     * @param loc2 Corner 2
+     * @implNote Creates particles to visualize the volume created by the two locations
+     */
+    private static void createParticleOutline(Location loc1, Location loc2) {
+        World world = loc1.getWorld();
+        if (world == null || !world.equals(loc2.getWorld())) {
+            Bukkit.getLogger().warning("[MCOHexRoyale -- createParticleOutline] Locations must be in the same world.");
+            return;
+        }
+
+        int minX = Math.min(loc1.getBlockX(), loc2.getBlockX());
+        int minY = Math.min(loc1.getBlockY(), loc2.getBlockY());
+        int minZ = Math.min(loc1.getBlockZ(), loc2.getBlockZ());
+        int maxX = Math.max(loc1.getBlockX(), loc2.getBlockX());
+        int maxY = Math.max(loc1.getBlockY(), loc2.getBlockY());
+        int maxZ = Math.max(loc1.getBlockZ(), loc2.getBlockZ());
+
+        // Increased particle count and persistence
+        for (int x = minX; x <= maxX; x++) {
+            for (int y = minY; y <= maxY; y++) {
+                for (int z = minZ; z <= maxZ; z++) {
+                    boolean isEdge = (x == minX || x == maxX || y == minY || y == maxY || z == minZ || z == maxZ);
+                    if (isEdge) {
+                        Location blockLoc = new Location(world, x + 0.5, y + 0.5, z + 0.5);
+
+                        // Increase the number of particles and density
+                        world.spawnParticle(
+                                Particle.HAPPY_VILLAGER, // Choose your preferred particle
+                                blockLoc,
+                                10,    // Particle count
+                                0.1,   // X-offset for spread
+                                0.1,   // Y-offset for spread
+                                0.1,   // Z-offset for spread
+                                0.05   // Speed/extra parameter for density
+                        );
+                    }
+                }
+            }
         }
     }
 
