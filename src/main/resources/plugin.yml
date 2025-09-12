@@ -1,0 +1,5 @@
+name: LazySelection
+version: '1.0'
+main: me.ericdavis.lazySelection.LazySelection
+api-version: '1.21'
+authors: [ LazyGamer21 ]
