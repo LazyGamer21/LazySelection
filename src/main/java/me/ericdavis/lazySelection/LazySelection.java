@@ -2,6 +2,7 @@ package me.ericdavis.lazySelection;
 
 import me.ericdavis.lazySelection.events.LazyAreaCompleteEvent;
 import me.ericdavis.lazySelection.events.LazyPointsCompleteEvent;
+import me.ericdavis.lazySelection.events.LocationSetEvent;
 import org.bukkit.*;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -207,9 +208,15 @@ public final class LazySelection implements Listener {
             return;
         }
 
-        playerTempPoints.add(clicked);
-        showSelectionParticles(player, clicked); // show particles
+        LocationSetEvent event = new LocationSetEvent(player, playerTempPoints, clicked, LocationType.POINTS);
+        Bukkit.getPluginManager().callEvent(event);
+        if (event.isCancelled()) return;
+
+        playerTempPoints.add(event.getLocation());
+        showSelectionParticles(player, event.getLocation()); // show particles
         player.sendMessage(pointAddedMessage.replace("%count%", String.valueOf(playerTempPoints.size())));
+
+        if (event.finishSelection()) confirmPoints(player);
     }
 
     private void handleAreaClick(Player player, UUID id, PlayerInteractEvent e) {
@@ -232,8 +239,11 @@ public final class LazySelection implements Listener {
 
         // FIRST CLICK
         if (tempFirstClicks.get(id) == null) {
-            tempFirstClicks.put(id, clicked);
-            showSelectionParticles(player, clicked); // show particles
+            LocationSetEvent event = new LocationSetEvent(player, clicked, LocationType.AREA);
+            Bukkit.getPluginManager().callEvent(event);
+            if (event.isCancelled()) return;
+            tempFirstClicks.put(id, event.getLocation());
+            showSelectionParticles(player, event.getLocation()); // show particles
             player.sendMessage(firstBlockMessage);
             return;
         }
